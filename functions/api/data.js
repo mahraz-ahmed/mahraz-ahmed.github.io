@@ -64,9 +64,14 @@ const DEFAULTS = {
 
 // --- Upstash Redis REST helpers ---
 
+function getRedisCredentials(env) {
+  const url = env.UPSTASH_REDIS_REST_URL || env.KV_REST_API_URL;
+  const token = env.UPSTASH_REDIS_REST_TOKEN || env.KV_REST_API_TOKEN;
+  return { url, token };
+}
+
 async function redisGet(env, key) {
-  const url = env.UPSTASH_REDIS_REST_URL;
-  const token = env.UPSTASH_REDIS_REST_TOKEN;
+  const { url, token } = getRedisCredentials(env);
   if (!url || !token) return null;
 
   const res = await fetch(`${url}/get/${key}`, {
@@ -88,8 +93,7 @@ async function redisGet(env, key) {
 }
 
 async function redisSet(env, key, value) {
-  const url = env.UPSTASH_REDIS_REST_URL;
-  const token = env.UPSTASH_REDIS_REST_TOKEN;
+  const { url, token } = getRedisCredentials(env);
   if (!url || !token) throw new Error("Redis not configured");
 
   const res = await fetch(`${url}/set/${key}`, {
@@ -119,7 +123,7 @@ const NO_CACHE_HEADERS = {
 
 export async function onRequestGet(context) {
   const { env } = context;
-  const kvUrl = env.UPSTASH_REDIS_REST_URL;
+  const { url: kvUrl } = getRedisCredentials(env);
 
   // If Redis isn't configured, return defaults
   if (!kvUrl) {
@@ -150,7 +154,7 @@ export async function onRequestGet(context) {
 
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const kvUrl = env.UPSTASH_REDIS_REST_URL;
+  const { url: kvUrl } = getRedisCredentials(env);
 
   if (!kvUrl) {
     return new Response(
