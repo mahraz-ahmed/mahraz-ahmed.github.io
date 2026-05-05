@@ -19,6 +19,5 @@
   },
   "homepage": "https://github.com/mahraz-ahmed/mahraz-ahmed.github.io#readme",
   "dependencies": {
-    "@vercel/kv": "^3.0.0"
   }
 }
