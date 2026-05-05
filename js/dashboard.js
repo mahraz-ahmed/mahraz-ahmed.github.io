@@ -157,6 +157,7 @@
   let statusInterval = DEFAULTS.statusInterval;
   let currentStatus = 0;
   let statusTimer = null;
+  let tflTimer = null;
 
   let remoteData = null;
 
@@ -222,8 +223,9 @@
     // GitHub Pages enforces HTTPS, so we can't use HTTP without Mixed Content errors.
     // Instead, we use the same proxy fallbacks as the BBC news ticker.
     const urlsToTry = [
+      "/api/weather",
       "https://api.codetabs.com/v1/proxy/?quest=" +
-        encodeURIComponent(targetUrl),
+      encodeURIComponent(targetUrl),
       "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl),
       targetUrl,
     ];
@@ -283,6 +285,101 @@
     }
 
     setTimeout(initWeather, 15 * 60 * 1000);
+  }
+
+  // ---- TfL Status ----
+  async function initTfl() {
+    const targetUrl = "https://api.tfl.gov.uk/Line/Mode/tube,elizabeth-line/Status";
+    const urlsToTry = [
+      "/api/tfl",
+      "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(targetUrl),
+      "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl),
+      targetUrl,
+    ];
+
+    let data = null;
+    for (const url of urlsToTry) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          data = await res.json();
+          if (Array.isArray(data) && data.length > 0) break;
+        }
+      } catch (err) {
+        console.warn("TfL proxy failed:", url, err);
+      }
+    }
+
+    const carouselEl = document.getElementById("tfl-carousel");
+    if (!carouselEl) return;
+
+    if (data && Array.isArray(data)) {
+      const lineOrder = [
+        "bakerloo", "central", "circle", "district", "elizabeth",
+        "hammersmith-city", "jubilee", "metropolitan", "northern",
+        "piccadilly", "victoria", "waterloo-city"
+      ];
+
+      const sortedData = [...data].sort((a, b) => {
+        const idxA = lineOrder.indexOf(a.id);
+        const idxB = lineOrder.indexOf(b.id);
+        if (idxA === -1 && idxB === -1) return a.name.localeCompare(b.name);
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+
+      let currentIndex = 0;
+
+      function renderTflSlide() {
+        if (!sortedData[currentIndex]) return;
+        const line = sortedData[currentIndex];
+        const statusSeverity = line.lineStatuses[0]?.statusSeverity || 10;
+        let textClass = "good";
+        if (statusSeverity < 10) {
+          if (statusSeverity === 9 || statusSeverity === 8) textClass = "minor";
+          else textClass = "severe";
+        }
+
+        const char = line.name.charAt(0).toUpperCase();
+        const statusDesc = line.lineStatuses[0]?.statusSeverityDescription || 'Good Service';
+        const reason = line.lineStatuses[0]?.reason || '';
+
+        carouselEl.classList.add("fade-out");
+
+        setTimeout(() => {
+          let reasonHtml = '';
+          if (reason && statusSeverity < 10) {
+            let shortReason = reason.replace(line.name + ' Line: ', '');
+            shortReason = shortReason.replace(line.name + ': ', '');
+            reasonHtml = `<div class="tfl-reason" title="${shortReason}">${shortReason}</div>`;
+          }
+
+          carouselEl.innerHTML = `
+            <div class="tfl-main-info">
+              <div class="tfl-line-header">
+                <div class="tfl-badge ${line.id}">${char}</div>
+                <span class="tfl-line-name">${line.name}</span>
+              </div>
+              <div class="tfl-status-text ${textClass}">${statusDesc}</div>
+            </div>
+            ${reasonHtml}
+          `;
+          carouselEl.classList.remove("fade-out");
+          currentIndex = (currentIndex + 1) % sortedData.length;
+        }, 400);
+      }
+
+      renderTflSlide();
+
+      if (tflTimer) clearInterval(tflTimer);
+      tflTimer = setInterval(renderTflSlide, 5000);
+
+    } else {
+      carouselEl.innerHTML = '<span style="font-size:0.7rem;color:var(--text-muted);">TfL Unavailable</span>';
+    }
+
+    setTimeout(initTfl, 10 * 60 * 1000);
   }
 
   // ---- Carousel ----
@@ -483,7 +580,7 @@
       const feedUrl = "https://www.engadget.com/rss.xml";
       const proxies = [
         "https://api.codetabs.com/v1/proxy/?quest=" +
-          encodeURIComponent(feedUrl),
+        encodeURIComponent(feedUrl),
         "https://api.allorigins.win/raw?url=" + encodeURIComponent(feedUrl),
         "https://corsproxy.io/?" + encodeURIComponent(feedUrl),
       ];
@@ -514,7 +611,7 @@
             const desc = item.querySelector("description") || item.querySelector("summary") || item.querySelector("content");
             if (title && title.textContent) {
               let text = decodeHTMLEntities(title.textContent).trim();
-              
+
               if (desc && desc.textContent) {
                 // Strip HTML tags that might be inside CDATA blocks
                 let descText = desc.textContent.replace(/<[^>]*>?/gm, '').trim();
@@ -573,6 +670,7 @@
     await loadData();
     initClock();
     initWeather();
+    initTfl();
     initCarousel();
     initStatusUpdates();
     initEvents();
@@ -586,7 +684,7 @@
       const oldDataStr = JSON.stringify(remoteData);
       await loadData();
       const newDataStr = JSON.stringify(remoteData);
-      
+
       if (oldDataStr !== newDataStr) {
         // Softly re-initialize components with the live data
         initCarousel();
