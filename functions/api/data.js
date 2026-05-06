@@ -84,9 +84,14 @@ async function redisGet(env, key) {
   if (json.result === null || json.result === undefined) return null;
 
   try {
-    return typeof json.result === "string"
+    let parsed = typeof json.result === "string"
       ? JSON.parse(json.result)
       : json.result;
+    // Handle legacy double-stringified data
+    if (typeof parsed === "string") {
+      parsed = JSON.parse(parsed);
+    }
+    return parsed;
   } catch {
     return json.result;
   }
@@ -102,7 +107,7 @@ async function redisSet(env, key, value) {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(JSON.stringify(value)),
+    body: JSON.stringify(value),
   });
 
   if (!res.ok) {
